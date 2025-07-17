@@ -1,67 +1,79 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import '../model/mahasiswa.dart';
 
 class DBHelper {
-  // Fungsi untuk reset database (drop dan create ulang tabel mahasiswa)
-  static Future<void> resetDatabase() async {
-    final db = await database;
-    await db.execute('DROP TABLE IF EXISTS mahasiswa');
-    await db.execute('''
-      CREATE TABLE mahasiswa (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nim TEXT,
-        nama TEXT,
-        prodi TEXT,
-        jeniskelamin TEXT
-      )
-    ''');
-  }
   static Database? _db;
 
-  static Future<Database> _initDB() async {
-    Directory dir = await getApplicationDocumentsDirectory();
-    String path = join(dir.path, 'mahasiswa.db');
+  // Inisialisasi database jika belum ada
+  static Future<Database> _initDb() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'mahasiswa.db');
 
-    return openDatabase(path, version: 1, onCreate: (db, version) async {
-      await db.execute('''
-        CREATE TABLE mahasiswa (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          nim TEXT,
-          nama TEXT,
-          prodi TEXT,
-          jeniskelamin TEXT
-        )
-      ''');
-    });
+    return openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE mahasiswa(
+            id INTEGER PRIMARY KEY,
+            nim TEXT NOT NULL,
+            nama TEXT NOT NULL,
+            prodi TEXT NOT NULL,
+            jeniskelamin TEXT NOT NULL,
+            alamat TEXT NOT NULL,
+            tanggallahir TEXT NOT NULL
+          )
+        ''');
+      },
+    );
   }
 
-  static Future<Database> get database async {
-    if (_db != null) return _db!;
-    _db = await _initDB();
-    return _db!;
+  // Getter untuk database
+  static Future<Database> get _database async {
+    return _db ??= await _initDb();
   }
 
-  static Future<int> insert(Mahasiswa m) async {
-    final db = await database;
-    return await db.insert('mahasiswa', m.toMap());
-  }
-
+  // Ambil semua data
   static Future<List<Mahasiswa>> getAll() async {
-    final db = await database;
-    final res = await db.query('mahasiswa');
+    final db = await _database;
+    final res = await db.query('mahasiswa', orderBy: 'id');
     return res.map((e) => Mahasiswa.fromMap(e)).toList();
   }
 
-  static Future<int> update(Mahasiswa m) async {
-    final db = await database;
-    return await db.update('mahasiswa', m.toMap(), where: 'id = ?', whereArgs: [m.id]);
+  // Insert data
+  static Future<int> insert(Mahasiswa data) async {
+    final db = await _database;
+    return await db.insert('mahasiswa', data.toMap());
   }
 
+  // Update data
+  static Future<int> update(Mahasiswa data) async {
+    final db = await _database;
+    return await db.update('mahasiswa', data.toMap(), where: 'id = ?', whereArgs: [data.id]);
+  }
+
+  // Delete data
   static Future<int> delete(int id) async {
-    final db = await database;
+    final db = await _database;
     return await db.delete('mahasiswa', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Cek apakah NIM sudah terdaftar, kecuali pada ID yang sedang diedit (jika ada)
+  static Future<bool> isNimExist(String nim, {int? excludeId}) async {
+    final db = await _database;
+    final res = await db.query(
+      'mahasiswa',
+      where: excludeId == null ? 'nim = ?' : 'nim = ? AND id != ?',
+      whereArgs: excludeId == null ? [nim] : [nim, excludeId],
+    );
+    return res.isNotEmpty;
+  }
+
+  // Reset database (hapus semua data)
+  static Future<void> resetDatabase() async {
+    final db = await _database;
+    await db.delete('mahasiswa');
+    
   }
 }
